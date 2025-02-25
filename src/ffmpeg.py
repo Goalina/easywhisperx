@@ -35,10 +35,13 @@ class Ffmpeg:
             return float(output.strip())
         except subprocess.CalledProcessError as e:
             print(f"命令执行失败: {e.output}")
+            return None
         except FileNotFoundError:
             print("找不到 ffprobe 命令")
+            return None
         except ValueError:
             print("无法解析输出内容")
+            return None
 
     def merge_intervals(self, intervals):
         if not intervals:
@@ -72,7 +75,7 @@ class Ffmpeg:
         ]
 
         # 运行 FFmpeg 并捕获输出
-        output = subprocess.check_output(command, stderr=subprocess.STDOUT, shell=True)
+        output = subprocess.check_output(command, stderr=subprocess.STDOUT)
 
         # 使用正则表达式匹配静音区间
         pattern = r"silence_start: (\d+\.?\d*)[\s\S]*?silence_end: (\d+\.?\d*)"
@@ -97,7 +100,7 @@ class Ffmpeg:
             self.output_file,
         ]
         # 运行 FFmpeg 并捕获输出
-        output = subprocess.check_output(command, stderr=subprocess.STDOUT, shell=True)
+        output = subprocess.check_output(command, stderr=subprocess.STDOUT)
         print(f"trim_head: {output}")
 
     def trim_tail(self, start, end):
@@ -114,7 +117,7 @@ class Ffmpeg:
             ]
             # 运行 FFmpeg 并捕获输出
             output = subprocess.check_output(
-                command, stderr=subprocess.STDOUT, shell=True
+                command, stderr=subprocess.STDOUT,
             )
             print(f"trim_tail: {output}")
 
