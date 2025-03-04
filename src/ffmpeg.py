@@ -117,7 +117,8 @@ class Ffmpeg:
             ]
             # 运行 FFmpeg 并捕获输出
             output = subprocess.check_output(
-                command, stderr=subprocess.STDOUT,
+                command,
+                stderr=subprocess.STDOUT,
             )
             print(f"trim_tail: {output}")
 
