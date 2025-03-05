@@ -125,7 +125,7 @@ class Ffmpeg:
 
 if __name__ == "__main__":
     video_path = "83887950610.mp4"
-    output_path = "output.mp4"
+    output_path = "output_fast.mp4"
     noise_threshold = 50.0
     duration_threshold = 60.0
     ffmpeg = Ffmpeg(video_path, output_path, noise_threshold, duration_threshold)
