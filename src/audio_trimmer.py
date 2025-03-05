@@ -1,3 +1,4 @@
+import datetime
 import os
 import shutil
 import subprocess
@@ -40,6 +41,8 @@ class AudioTrimmer:
 
         self.ffmpeg_path = check_ffmpeg()
         self.ffprobe_path = check_ffprobe()
+        self.noise_threshold = noise_threshold
+        self.duration_threshold = duration_threshold
 
     def get_media_duration(self):
         """获取媒体文件的总时长（秒）"""
@@ -58,7 +61,7 @@ class AudioTrimmer:
             data = json.loads(output)
             return float(data["format"]["duration"])
         except subprocess.TimeoutExpired as e:
-            raise RuntimeError("获取媒体时长超时: {e}")
+            raise RuntimeError(f"获取媒体时长超时: {e}")
         except subprocess.CalledProcessError as e:
             raise RuntimeError(f"获取时长失败: {e}")
 
@@ -119,19 +122,40 @@ class AudioTrimmer:
         return valid_segments
 
     def generate_filter_complex(self, segments):
-        """生成FFmpeg滤镜链用于剪切和拼接"""
+        """生成FFmpeg滤镜链用于剪切和拼接音频和视频"""
         if not segments:
             return None
-        filter_chain = []
-        concat_inputs = []
+
+        audio_filter_chain = []
+        video_filter_chain = []
+        concat_audio_inputs = []
+        concat_video_inputs = []
+
         for i, (start, end) in enumerate(segments):
-            filter_chain.append(
-                f"[0:a]trim=start={start}:end={end},asetpts=PTS-STARTPTS[part{i}];"
+            # 处理音频流
+            audio_filter_chain.append(
+                f"[0:a]trim=start={start}:end={end},asetpts=PTS-STARTPTS[part_audio{i}];"
             )
-            concat_inputs.append(f"[part{i}]")
-        concat_str = "".join(concat_inputs) + f"concat=n={len(segments)}:v=0:a=1[out]"
-        filter_chain.append(concat_str)
-        return "".join(filter_chain)
+            concat_audio_inputs.append(f"[part_audio{i}]")
+
+            # 处理视频流
+            video_filter_chain.append(
+                f"[0:v]trim=start={start}:end={end},setpts=PTS-STARTPTS[part_video{i}];"
+            )
+            concat_video_inputs.append(f"[part_video{i}]")
+
+        # 拼接音频流
+        audio_concat_str = "".join(concat_audio_inputs) + f"concat=n={len(segments)}:v=0:a=1[out_audio];"
+        audio_filter_chain.append(audio_concat_str)
+
+        # 拼接视频流
+        video_concat_str = "".join(concat_video_inputs) + f"concat=n={len(segments)}:v=1:a=0[out_video];"
+        video_filter_chain.append(video_concat_str)
+
+        # 合并音频和视频的过滤器链
+        full_filter_chain = "".join(audio_filter_chain + video_filter_chain)
+        # 移除末尾的分号（如果有）
+        return full_filter_chain.strip(';')
 
     def trim_silence(self, output_file):
         """执行静音剪切并生成新文件
@@ -141,11 +165,17 @@ class AudioTrimmer:
             bool: 是否成功
         """
         valid_segments = self.get_valid_segments()
+        print("有效片段:", valid_segments)
+
         if not valid_segments:
             print("警告：没有有效音频片段，跳过处理！")
             return False
 
         filter_complex = self.generate_filter_complex(valid_segments)
+        if not filter_complex:
+            print("警告：未生成有效的过滤器链，跳过处理！")
+            return False
+
         cmd = [
             "ffmpeg",
             "-y",
@@ -153,28 +183,27 @@ class AudioTrimmer:
             self.input_file,
             "-filter_complex",
             filter_complex,
-            "-map",
-            "[out]",
+            "-map", "[out_audio]",
+            "-map", "[out_video]",
+            "-c:v", "libx264",  # 添加视频编码器参数确保兼容性
+            "-c:a", "aac",      # 添加音频编码器参数
             output_file,
         ]
         try:
             subprocess.run(cmd, check=True, shell=False)
+            print("处理完成--时间:", datetime.datetime.now())
             print(f"处理完成！输出文件已保存至：{output_file}")
             return True
         except subprocess.CalledProcessError as e:
+            print("当前时间:", datetime.datetime.now())
             print(f"处理失败：{e}")
             return False
 
 
 # 使用示例
 if __name__ == "__main__":
+    print("当前时间:", datetime.datetime.now())
     input_file = "83887950610.mp4"
     output_file = "output.mp4"
     trimmer = AudioTrimmer(input_file, noise_threshold=-50.0, duration_threshold=60.0)
-
-    # 获取有效片段（可选，用于调试）
-    valid_segments = trimmer.get_valid_segments()
-    print("有效片段:", valid_segments)
-
-    # 执行剪切
     trimmer.trim_silence(output_file)
