@@ -24,7 +24,7 @@ def check_ffprobe():
 class AudioTrimmer:
     """音频/视频静音剪切工具类，提供检测和剪切功能"""
 
-    def __init__(self, input_file, noise_threshold=-30.0, duration_threshold=5.0):
+    def __init__(self, input_file, noise_threshold=-50.0, duration_threshold=30.0):
         """初始化剪切工具
         Args:
             input_file (str): 输入文件路径
@@ -84,7 +84,6 @@ class AudioTrimmer:
         current_start = None
         buffer = ""
 
-        # 更健壮的正则表达式
         start_pattern = re.compile(r"silence_start:\s*([\d.]+)")
         end_pattern = re.compile(r"silence_end:\s*([\d.]+).*?silence_duration:\s*([\d.]+)")
 
@@ -94,32 +93,30 @@ class AudioTrimmer:
                 break
             buffer += chunk
 
-            # 按行处理日志
             while "\n" in buffer:
                 line, buffer = buffer.split("\n", 1)
                 line = line.strip()
 
-                # 检测静音开始
                 if "silence_start" in line:
                     if match := start_pattern.search(line):
                         current_start = float(match.group(1))
-                        print(f"[DEBUG] 检测到静音开始: {current_start}")  # 调试输出
+                        print(f"[DEBUG] 检测到静音开始: {current_start}")
 
-                # 检测静音结束
                 elif "silence_end" in line:
                     if match := end_pattern.search(line):
                         end = float(match.group(1))
                         duration = float(match.group(2))
                         if duration >= self.duration_threshold and current_start is not None:
                             silence_segments.append((current_start, end))
-                            print(f"[DEBUG] 检测到静音结束: {end}, 持续时间: {duration}")  # 调试输出
+                            print(f"[DEBUG] 检测到静音结束: {end}, 持续时间: {duration}")
                         current_start = None
 
         # 处理视频结尾的静音
         duration = self.get_media_duration()
-        if current_start is not None and duration - current_start >= self.duration_threshold:
-            silence_segments.append((current_start, duration))
-            print(f"[DEBUG] 检测到结尾静音: {current_start} 到 {duration}")  # 调试输出
+        if current_start is not None:
+            if duration - current_start >= self.duration_threshold:
+                silence_segments.append((current_start, duration))
+                print(f"[DEBUG] 检测到结尾静音: {current_start} 到 {duration}")
 
         return silence_segments
 
@@ -223,6 +220,13 @@ class FastAudioTrimmer(AudioTrimmer):
             print("没有需要处理的片段")
             return False
 
+        # 如果只有一个有效片段且与整个视频时长相同，则直接复制原文件
+        duration = self.get_media_duration()
+        if len(valid_segments) == 1 and valid_segments[0] == (0.0, duration):
+            print("视频中没有静音片段，直接复制原文件")
+            shutil.copy2(self.input_file, output_file)
+            return True
+
         # 创建临时目录
         with tempfile.TemporaryDirectory() as tmpdir:
             # 阶段1：生成切割片段
@@ -268,9 +272,10 @@ class FastAudioTrimmer(AudioTrimmer):
 if __name__ == "__main__":
     print("当前时间:", datetime.datetime.now())
     input_file = "83887950610.mp4"
-    input_file = "test_pattern.mp4"
-    output_file = "10_fast.mp4"
+    # input_file = "test_pattern.mp4"
+    output_file = "fast.mp4"
     # trimmer = AudioTrimmer(input_file, noise_threshold=-50.0, duration_threshold=60.0)
     # trimmer.trim_silence(output_file)
     trimmer = FastAudioTrimmer(input_file)
+    # trimmer.get_valid_segments()
     trimmer.fast_trim(output_file)
