@@ -5,6 +5,7 @@ import subprocess
 import re
 import json
 import tempfile
+import sys
 
 
 def check_ffmpeg():
@@ -24,7 +25,7 @@ def check_ffprobe():
 class AudioTrimmer:
     """音频/视频静音剪切工具类，提供检测和剪切功能"""
 
-    def __init__(self, input_file, noise_threshold=-50.0, duration_threshold=30.0):
+    def __init__(self, input_file, noise_threshold=-60.0, duration_threshold=20.0):
         """初始化剪切工具
         Args:
             input_file (str): 输入文件路径
@@ -232,7 +233,7 @@ class FastAudioTrimmer(AudioTrimmer):
             # 阶段1：生成切割片段
             segment_files = []
             for idx, (start, end) in enumerate(valid_segments):
-                output_segment = os.path.join(tmpdir, f"segment_{idx}.mp4")
+                output_segment = os.path.join(tmpdir, f"{output_file}_segment_{idx}.mp4")
                 duration = end - start
 
                 cmd = [
@@ -249,7 +250,7 @@ class FastAudioTrimmer(AudioTrimmer):
                 segment_files.append(output_segment)
 
             # 阶段2：合并片段
-            list_file = os.path.join(tmpdir, "filelist.txt")
+            list_file = os.path.join(tmpdir, f"{output_file}_filelist.txt")
             with open(list_file, "w") as f:
                 for file in segment_files:
                     f.write(f"file '{file}'\n")
@@ -267,13 +268,19 @@ class FastAudioTrimmer(AudioTrimmer):
         print(f"处理完成，输出文件：{output_file}")
         return True
 
+def auto_trimmer(input_file, output_file):
+    """自动剪辑的入口，输入是本地一个原始视频路径，输出是一个剪辑后的视频路径"""
+    trimmer = FastAudioTrimmer(input_file)
+    # trimmer.get_valid_segments()
+    trimmer.fast_trim(output_file)
 
 # 使用示例
 if __name__ == "__main__":
     print("当前时间:", datetime.datetime.now())
-    input_file = "83887950610.mp4"
-    # input_file = "test_pattern.mp4"
-    output_file = "fast.mp4"
+    # input_file = "83887950610.mp4"
+    input_file = sys.argv[1]
+    output_file = sys.argv[2]
+    # output_file = "fast.mp4"
     # trimmer = AudioTrimmer(input_file, noise_threshold=-50.0, duration_threshold=60.0)
     # trimmer.trim_silence(output_file)
     trimmer = FastAudioTrimmer(input_file)
