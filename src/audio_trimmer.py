@@ -71,14 +71,17 @@ class AudioTrimmer:
         """改进版静音检测方法，支持完整日志解析"""
         cmd = [
             self.ffmpeg_path,
-            "-i", self.input_file,
-            "-af", f"silencedetect=noise={self.noise_threshold}dB:d={self.duration_threshold}",
-            "-f", "null", "-",
+            "-i",
+            self.input_file,
+            "-af",
+            f"silencedetect=noise={self.noise_threshold}dB:d={self.duration_threshold}",
+            "-f",
+            "null",
+            "-",
         ]
 
         process = subprocess.Popen(
-            cmd, stderr=subprocess.PIPE,
-            universal_newlines=True, shell=False
+            cmd, stderr=subprocess.PIPE, universal_newlines=True, shell=False
         )
 
         silence_segments = []
@@ -86,7 +89,9 @@ class AudioTrimmer:
         buffer = ""
 
         start_pattern = re.compile(r"silence_start:\s*([\d.]+)")
-        end_pattern = re.compile(r"silence_end:\s*([\d.]+).*?silence_duration:\s*([\d.]+)")
+        end_pattern = re.compile(
+            r"silence_end:\s*([\d.]+).*?silence_duration:\s*([\d.]+)"
+        )
 
         while True:
             chunk = process.stderr.read(1024)
@@ -107,9 +112,14 @@ class AudioTrimmer:
                     if match := end_pattern.search(line):
                         end = float(match.group(1))
                         duration = float(match.group(2))
-                        if duration >= self.duration_threshold and current_start is not None:
+                        if (
+                            duration >= self.duration_threshold
+                            and current_start is not None
+                        ):
                             silence_segments.append((current_start, end))
-                            print(f"[DEBUG] 检测到静音结束: {end}, 持续时间: {duration}")
+                            print(
+                                f"[DEBUG] 检测到静音结束: {end}, 持续时间: {duration}"
+                            )
                         current_start = None
 
         # 处理视频结尾的静音
@@ -194,13 +204,20 @@ class AudioTrimmer:
             self.input_file,
             "-filter_complex",
             self.generate_filter_complex(valid_segments),
-            "-map", "[out_audio]",
-            "-map", "[out_video]",
-            "-c:v", "libx264",
-            "-preset", "fast",
-            "-crf", "23",
-            "-c:a", "aac",
-            "-b:a", "128k",
+            "-map",
+            "[out_audio]",
+            "-map",
+            "[out_video]",
+            "-c:v",
+            "libx264",
+            "-preset",
+            "fast",
+            "-crf",
+            "23",
+            "-c:a",
+            "aac",
+            "-b:a",
+            "128k",
             output_file,
         ]
         try:
@@ -233,18 +250,27 @@ class FastAudioTrimmer(AudioTrimmer):
             # 阶段1：生成切割片段
             segment_files = []
             for idx, (start, end) in enumerate(valid_segments):
-                output_segment = os.path.join(tmpdir, f"{output_file}_segment_{idx}.mp4")
+                output_segment = os.path.join(
+                    tmpdir, f"{output_file}_segment_{idx}.mp4"
+                )
                 duration = end - start
 
                 cmd = [
-                    "ffmpeg", "-y",
-                    "-ss", str(start),
-                    "-i", self.input_file,
-                    "-t", str(duration),
-                    "-c:v", "copy",  # 视频流直接复制
-                    "-c:a", "copy",  # 音频流直接复制
-                    "-avoid_negative_ts", "make_zero",
-                    output_segment
+                    "ffmpeg",
+                    "-y",
+                    "-ss",
+                    str(start),
+                    "-i",
+                    self.input_file,
+                    "-t",
+                    str(duration),
+                    "-c:v",
+                    "copy",  # 视频流直接复制
+                    "-c:a",
+                    "copy",  # 音频流直接复制
+                    "-avoid_negative_ts",
+                    "make_zero",
+                    output_segment,
                 ]
                 subprocess.run(cmd, check=True)
                 segment_files.append(output_segment)
@@ -256,23 +282,30 @@ class FastAudioTrimmer(AudioTrimmer):
                     f.write(f"file '{file}'\n")
 
             merge_cmd = [
-                "ffmpeg", "-y",
-                "-f", "concat",
-                "-safe", "0",
-                "-i", list_file,
-                "-c", "copy",  # 直接流复制
-                output_file
+                "ffmpeg",
+                "-y",
+                "-f",
+                "concat",
+                "-safe",
+                "0",
+                "-i",
+                list_file,
+                "-c",
+                "copy",  # 直接流复制
+                output_file,
             ]
             subprocess.run(merge_cmd, check=True)
 
         print(f"处理完成，输出文件：{output_file}")
         return True
 
+
 def auto_trimmer(input_file, output_file):
     """自动剪辑的入口，输入是本地一个原始视频路径，输出是一个剪辑后的视频路径"""
     trimmer = FastAudioTrimmer(input_file)
     # trimmer.get_valid_segments()
     trimmer.fast_trim(output_file)
+
 
 # 使用示例
 if __name__ == "__main__":
