@@ -6,6 +6,9 @@ ENV HF_ENDPOINT=https://hf-mirror.com
 
 EXPOSE 8000
 
+ARG GIT_USER
+ARG GIT_PASS
+
 RUN apt-get update && \
     apt-get install -y git python3 python3-pip ffmpeg libcudnn8 libcudnn8-dev && \
     rm -rf /var/lib/apt/lists/*
@@ -16,7 +19,7 @@ RUN mkdir -p /root/.pip && \
 
 RUN pip install whisperx
 
-RUN git clone https://github.com/opensourceways/easywhisperx.git
+RUN git clone https://${GIT_USER}:${GIT_PASS}@github.com/opensourceways/easywhisperx.git
 
 RUN pip install fastapi uvicorn pydantic
 
