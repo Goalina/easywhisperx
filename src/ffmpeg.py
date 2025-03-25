@@ -117,19 +117,7 @@ class Ffmpeg:
             ]
             # 运行 FFmpeg 并捕获输出
             output = subprocess.check_output(
-                command, stderr=subprocess.STDOUT,
+                command,
+                stderr=subprocess.STDOUT,
             )
             print(f"trim_tail: {output}")
-
-
-if __name__ == "__main__":
-    video_path = "83887950610.mp4"
-    output_path = "output.mp4"
-    noise_threshold = 50.0
-    duration_threshold = 60.0
-    ffmpeg = Ffmpeg(video_path, output_path, noise_threshold, duration_threshold)
-    total_seconds = ffmpeg.get_total_times()
-    print(f"Video duration: {total_seconds} seconds")
-
-    silences_segments = ffmpeg.get_silences_segments()
-    print(f"Silences segments: {silences_segments}")
