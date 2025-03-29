@@ -11,7 +11,7 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 
 config = configparser.ConfigParser()
-config.read("/app/config.ini")
+config.read("/app/easywhisperx/config/config.ini")
 
 download_directory = config["paths"]["download_directory"].replace('"', "").strip()
 output_directory = config["paths"]["output_directory"].replace('"', "").strip()

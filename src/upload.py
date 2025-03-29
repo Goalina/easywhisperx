@@ -7,7 +7,7 @@ from obs import PutObjectHeader
 import traceback
 
 config = configparser.ConfigParser()
-config.read("/app/config.ini")
+config.read("/app/easywhisperx/config/config.ini")
 
 AccessKeyID = config.get("obs", "AccessKeyID", fallback="").replace('"', "").strip()
 SecretAccessKey = (

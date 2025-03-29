@@ -6,7 +6,7 @@ from obs import ObsClient, GetObjectHeader
 
 def init_obs_client():
     config = configparser.ConfigParser()
-    config.read("/app/config.ini")
+    config.read("/app/easywhisperx/config/config.ini")
 
     ak = config.get("obs", "AccessKeyID", fallback="").replace('"', "").strip()
     sk = config.get("obs", "SecretAccessKey", fallback="").replace('"', "").strip()
