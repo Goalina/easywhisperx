@@ -1,6 +1,6 @@
-from obs_download import download_file
-from upload import upload
-from method import TranscriptionProcessor
+from .obs_download import download_file
+from .upload import upload
+from .method import TranscriptionProcessor
 
 import os
 import configparser
