@@ -20,8 +20,11 @@ RUN chown $APP_USER:$APP_USER /app
 # 安装系统依赖（root阶段）
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
-    git python3 python3-pip ffmpeg libcudnn8 libcudnn8-dev && \
+    git curl vim net-tools python3 python3-pip ffmpeg libcudnn8 libcudnn8-dev && \
     rm -rf /var/lib/apt/lists/*
+
+# 切换到非root用户
+USER $APP_USER
 
 # 配置pip镜像（用户级配置）
 RUN mkdir -p $HOME/.pip && \
@@ -29,12 +32,8 @@ RUN mkdir -p $HOME/.pip && \
     echo "index-url = https://pypi.tuna.tsinghua.edu.cn/simple" >> $HOME/.pip/pip.conf && \
     chown -R $APP_USER:$APP_USER $HOME/.pip
 
-# 切换到非root用户
-USER $APP_USER
-
 # 安装Python依赖
-RUN pip install --user whisperx fastapi uvicorn pydantic && \
-    pip install --user esdk-obs-python --trusted-host pypi.org
+RUN pip install whisperx fastapi uvicorn pydantic esdk-obs-python
 
 # 克隆代码
 ARG GIT_USER
