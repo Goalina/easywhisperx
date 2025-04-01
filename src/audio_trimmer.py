@@ -1,12 +1,13 @@
 import datetime
+import logging
 import os
 import shutil
 import subprocess
 import re
 import json
 import tempfile
-import sys
 
+logger = logging.getLogger('log')
 
 class AudioTrimmer:
     """音频/视频静音剪切工具类，提供检测和剪切功能"""
@@ -166,7 +167,10 @@ class FastAudioTrimmer(AudioTrimmer):
         duration = self.get_media_duration()
         if len(valid_segments) == 1 and valid_segments[0] == (0.0, duration):
             print("视频中没有静音片段，直接复制原文件")
-            shutil.copy2(self.input_file, output_file)
+            try:
+                shutil.copy2(self.input_file, output_file)
+            except shutil.SameFileError:
+                return True
             return True
 
         # 创建临时目录
@@ -228,3 +232,28 @@ def auto_trimmer(input_file, output_file):
     """自动剪辑的入口，输入是本地一个原始视频路径，输出是一个剪辑后的视频路径"""
     trimmer = FastAudioTrimmer(input_file)
     trimmer.fast_trim(output_file)
+
+
+def trimmer_video(video_path, mid):
+    # 生成剪辑后的视频路径
+    trimmer_path = video_path.replace('.mp4', '_trimmer.mp4')
+
+    # 执行自动剪辑
+    auto_trimmer(video_path, trimmer_path)
+
+    # 检查剪辑后的视频路径是否为空
+    if not trimmer_path:
+        logger.warning('meeting {}: trimmer video path could not be empty'.format(mid))
+        return video_path
+
+    # 检查剪辑后的视频文件是否存在
+    if not os.path.exists(trimmer_path):
+        logger.warning('meeting {}: fail to trimmer video'.format(mid))
+        return video_path
+
+    # 检查剪辑后的视频文件是否为空
+    if os.path.getsize(trimmer_path) == 0:
+        logger.warning('meeting {}: trimmer but did not get the full video'.format(mid))
+        return video_path
+
+    return trimmer_path
