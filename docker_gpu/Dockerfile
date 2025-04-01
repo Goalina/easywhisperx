@@ -40,6 +40,7 @@ ARG GIT_USER
 ARG GIT_PASS
 RUN git clone https://${GIT_USER}:${GIT_PASS}@github.com/opensourceways/easywhisperx.git && \
     chown -R $APP_USER:$APP_USER /app/easywhisperx
+RUN cp /app/easywhisperx/src/transcribe.py /home/appuser/.local/lib/python3.10/site-packages/whisperx/transcribe.py
 
 EXPOSE 8000
 
