@@ -114,10 +114,10 @@ class TranscriptionProcessor:
 
         base_path = object_key.split("/")[0]
         vtt_object_key = (
-            f"{base_path}/{current_year_month}/{os.path.basename(vtt_file)}"
+            f"{base_path}/{current_year_month}/{mid}/{os.path.basename(vtt_file)}"
         )
         json_object_key = (
-            f"{base_path}/{current_year_month}/{os.path.basename(json_file)}"
+            f"{base_path}/{current_year_month}/{mid}/{os.path.basename(json_file)}"
         )
 
         return vtt_object_key, json_object_key

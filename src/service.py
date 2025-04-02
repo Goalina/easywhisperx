@@ -65,7 +65,7 @@ async def process_transcription_task(object_key: str, bucket_key: str, mid: str)
 
         uuid_str = str(uuid.uuid4())
         download_path = os.path.join(download_directory, uuid_str, object_key.split("/")[-1])
-        output_path = f"{output_directory}/{uuid_str}"
+        output_path = f"{output_directory}/{mid}"
 
         os.makedirs(os.path.dirname(download_path), exist_ok=True)
         os.makedirs(output_path, exist_ok=True)
@@ -76,8 +76,8 @@ async def process_transcription_task(object_key: str, bucket_key: str, mid: str)
 
         trimmer_path = trimmer_video(download_path, mid)
 
-        vtt_file = os.path.join(output_path, f"{os.path.splitext(os.path.basename(download_path))[0]}.vtt")
-        json_file = os.path.join(output_path, f"{os.path.splitext(os.path.basename(download_path))[0]}.json")
+        vtt_file = os.path.join(output_path, f"{os.path.splitext(os.path.basename(trimmer_path))[0]}.vtt")
+        json_file = os.path.join(output_path, f"{os.path.splitext(os.path.basename(trimmer_path))[0]}.json")
 
         whisperx_command = [
             "whisperx",
@@ -90,7 +90,7 @@ async def process_transcription_task(object_key: str, bucket_key: str, mid: str)
             hf_token,
             trimmer_path,
             "--output_dir",
-            output_directory,
+            output_path,
             "--initial_prompt",
             "这是一段openEuelr的会议记录，尽可能使用hotwords，不要翻译重复字数超过3的词。",
             "--compute_type",
