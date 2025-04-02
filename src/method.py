@@ -52,43 +52,46 @@ class TranscriptionProcessor:
 
     @staticmethod
     def convert_vtt_to_json(input_file: str) -> str:
-        """
-        将VTT格式的字幕文件转换为JSON格式
-
-        Args:
-            input_file: 输入的VTT文件路径
-
-        Returns:
-            生成的JSON文件路径
-        """
         segments = []
 
         with open(input_file, "r", encoding="utf-8") as f:
-            lines = f.readlines()
-            for i in range(len(lines)):
-                line = lines[i].strip()
+            lines = [line.strip() for line in f if line.strip()]
+
+            i = 0
+            while i < len(lines):
+                line = lines[i]
+
+                if line == "WEBVTT":
+                    i += 1
+                    continue
+
                 if "-->" in line:
-                    start_time, end_time = line.split(" --> ")
-                    content = lines[i + 1].strip()
-                    speaker_match = re.search(r"\[SPEAKER_(\d+)\]", content)
+                    start_time, end_time = [t.strip() for t in line.split("-->")]
+                    content_lines = []
+
+                    i += 1
+                    while i < len(lines) and "-->" not in lines[i]:
+                        content_lines.append(lines[i])
+                        i += 1
+
+                    full_content = "".join(content_lines)
+                    full_content = re.sub(r'\s+', ' ', full_content).strip()
+
+                    speaker_match = re.search(r"\[(SPEAKER_\d+)\]:\s*(.*)", full_content)
                     if speaker_match:
-                        speaker_id = speaker_match.group(0)
-                        content = re.sub(r"\[SPEAKER_\d+\]: ", "", content)
-                        segments.append(
-                            {
-                                "ID": len(segments) + 1,
-                                "start_time": start_time,
-                                "end_time": end_time,
-                                "speaker": speaker_id,
-                                "content": content,
-                            }
-                        )
+                        segments.append({
+                            "ID": len(segments) + 1,
+                            "start_time": start_time,
+                            "end_time": end_time,
+                            "speaker": f"[{speaker_match.group(1)}]",
+                            "content": speaker_match.group(2)
+                        })
+                else:
+                    i += 1
 
-        json_output = {"segments": segments}
         output_file = os.path.splitext(input_file)[0] + ".json"
-
         with open(output_file, "w", encoding="utf-8") as f:
-            json.dump(json_output, f, ensure_ascii=False, indent=4)
+            json.dump({"segments": segments}, f, ensure_ascii=False, indent=4)
 
         return output_file
 
