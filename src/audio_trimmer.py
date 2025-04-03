@@ -7,7 +7,8 @@ import re
 import json
 import tempfile
 
-logger = logging.getLogger('log')
+logger = logging.getLogger("log")
+
 
 class AudioTrimmer:
     """音频/视频静音剪切工具类，提供检测和剪切功能"""
@@ -231,29 +232,33 @@ class FastAudioTrimmer(AudioTrimmer):
 def auto_trimmer(input_file, output_file):
     """自动剪辑的入口，输入是本地一个原始视频路径，输出是一个剪辑后的视频路径"""
     trimmer = FastAudioTrimmer(input_file)
-    trimmer.fast_trim(output_file)
+    if not trimmer.fast_trim(output_file):
+        logger.warning("meeting {}: video could not be empty".format(input_file))
+        return False
+    return True
 
 
 def trimmer_video(video_path, mid):
     # 生成剪辑后的视频路径
-    trimmer_path = video_path.replace('.mp4', '_trimmer.mp4')
+    trimmer_path = video_path.replace(".mp4", "_trimmer.mp4")
 
     # 执行自动剪辑
-    auto_trimmer(video_path, trimmer_path)
+    if not auto_trimmer(video_path, trimmer_path):
+        raise Exception("自动修剪失败，请检查视频是否为空白视频。")
 
     # 检查剪辑后的视频路径是否为空
     if not trimmer_path:
-        logger.warning('meeting {}: trimmer video path could not be empty'.format(mid))
+        logger.warning("meeting {}: trimmer video path could not be empty".format(mid))
         return video_path
 
     # 检查剪辑后的视频文件是否存在
     if not os.path.exists(trimmer_path):
-        logger.warning('meeting {}: fail to trimmer video'.format(mid))
+        logger.warning("meeting {}: fail to trimmer video".format(mid))
         return video_path
 
     # 检查剪辑后的视频文件是否为空
     if os.path.getsize(trimmer_path) == 0:
-        logger.warning('meeting {}: trimmer but did not get the full video'.format(mid))
+        logger.warning("meeting {}: trimmer but did not get the full video".format(mid))
         return video_path
 
     return trimmer_path

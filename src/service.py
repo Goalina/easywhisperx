@@ -2,11 +2,9 @@ import logging
 
 logging.basicConfig(
     level=logging.INFO,
-    format='【%(asctime)s】：%(message)s',
-    datefmt='%Y-%m-%d %H:%M:%S',
-    handlers=[
-        logging.StreamHandler()
-    ]
+    format="【%(asctime)s】：%(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+    handlers=[logging.StreamHandler()],
 )
 logger = logging.getLogger(__name__)
 
@@ -19,7 +17,7 @@ import os
 import configparser
 import subprocess
 import requests
-from fastapi import FastAPI, BackgroundTasks
+from fastapi import FastAPI, BackgroundTasks, responses
 from pydantic import BaseModel
 from asyncio import Semaphore
 import uuid
@@ -37,7 +35,7 @@ storage_server = config["storage"]["server"].replace('"', "").strip()
 storage_bucket = config["storage"]["bucket"].replace('"', "").strip()
 
 app = FastAPI()
-semaphore = Semaphore(2)
+semaphore = Semaphore(10)
 
 
 class DownloadRequest(BaseModel):
@@ -47,10 +45,20 @@ class DownloadRequest(BaseModel):
 
 
 @app.post("/meeting_translate")
-async def meeting_translate(request: DownloadRequest, background_tasks: BackgroundTasks):
+async def meeting_translate(
+    request: DownloadRequest, background_tasks: BackgroundTasks
+):
     logger.info(f"Received new transcription task, mid: {request.mid}")
-    background_tasks.add_task(process_with_semaphore, request.object_key, request.bucket_key, request.mid)
-    return {"message": "Transcription task started", "mid": request.mid}
+    if request.object_key.split("/")[-2] == request.mid:
+        background_tasks.add_task(
+            process_with_semaphore, request.object_key, request.bucket_key, request.mid
+        )
+        return {"message": "Transcription task started", "mid": request.mid}
+    else:
+        return responses.JSONResponse(
+            content={"message": "Transcription task err: mid can't match object_key"},
+            status_code=400,
+        )
 
 
 async def process_with_semaphore(object_key: str, bucket_key: str, mid: str):
@@ -64,7 +72,9 @@ async def process_transcription_task(object_key: str, bucket_key: str, mid: str)
         logger.info(f"Starting processing for mid {mid}")
 
         uuid_str = str(uuid.uuid4())
-        download_path = os.path.join(download_directory, uuid_str, object_key.split("/")[-1])
+        download_path = os.path.join(
+            download_directory, uuid_str, object_key.split("/")[-1]
+        )
         output_path = f"{output_directory}/{mid}"
 
         os.makedirs(os.path.dirname(download_path), exist_ok=True)
@@ -76,8 +86,12 @@ async def process_transcription_task(object_key: str, bucket_key: str, mid: str)
 
         trimmer_path = trimmer_video(download_path, mid)
 
-        vtt_file = os.path.join(output_path, f"{os.path.splitext(os.path.basename(trimmer_path))[0]}.vtt")
-        json_file = os.path.join(output_path, f"{os.path.splitext(os.path.basename(trimmer_path))[0]}.json")
+        vtt_file = os.path.join(
+            output_path, f"{os.path.splitext(os.path.basename(trimmer_path))[0]}.vtt"
+        )
+        json_file = os.path.join(
+            output_path, f"{os.path.splitext(os.path.basename(trimmer_path))[0]}.json"
+        )
 
         whisperx_command = [
             "whisperx",
@@ -104,9 +118,13 @@ async def process_transcription_task(object_key: str, bucket_key: str, mid: str)
             "--max_line_width",
             "20",
         ]
-        process = subprocess.run(whisperx_command, capture_output=True, text=True, shell=False, timeout=3600)
+        process = subprocess.run(
+            whisperx_command, capture_output=True, text=True, shell=False, timeout=3600
+        )
         if process.returncode != 0:
             raise Exception(f"whisperx failed: {process.stderr}")
+
+        TranscriptionProcessor.deduplicate_vtt_file(vtt_file, max_repeat=3)
 
         with open(vtt_file, "r", encoding="utf-8") as f:
             transcription_text = f.read()
@@ -116,14 +134,33 @@ async def process_transcription_task(object_key: str, bucket_key: str, mid: str)
             f.write(adjusted_transcription)
         formater.convert_vtt_to_json(vtt_file)
 
-        vtt_object_key, json_object_key = formater.generate_object_keys(mid, object_key, vtt_file, json_file)
-        mp4_object_key = os.path.splitext(vtt_object_key)[0] + '.mp4'
+        vtt_object_key, json_object_key = formater.generate_object_keys(
+            mid, object_key, vtt_file, json_file
+        )
+        mp4_object_key = os.path.splitext(vtt_object_key)[0] + ".mp4"
 
-        upload(storage_server, storage_bucket, file_path=vtt_file, objectKey=vtt_object_key)
-        upload(storage_server, storage_bucket, file_path=json_file, objectKey=json_object_key)
-        upload(storage_server, storage_bucket, file_path=trimmer_path, objectKey=mp4_object_key)
+        upload(
+            storage_server, storage_bucket, file_path=vtt_file, objectKey=vtt_object_key
+        )
+        upload(
+            storage_server,
+            storage_bucket,
+            file_path=json_file,
+            objectKey=json_object_key,
+        )
+        upload(
+            storage_server,
+            storage_bucket,
+            file_path=trimmer_path,
+            objectKey=mp4_object_key,
+        )
 
-        send_callback(mid, vtt_path=vtt_object_key, json_path=json_object_key, mp4_path=mp4_object_key)
+        send_callback(
+            mid,
+            vtt_path=vtt_object_key,
+            json_path=json_object_key,
+            mp4_path=mp4_object_key,
+        )
         logger.info(f"Task for mid {mid} completed successfully")
 
     except Exception as e:
@@ -145,11 +182,7 @@ def send_callback(mid: str, vtt_path: str, json_path: str, mp4_path: str):
         }
 
         logger.info(f"Sending callback for mid:{mid}")
-        response = requests.post(
-            callback_url,
-            json=callback_data,
-            timeout=30
-        )
+        response = requests.post(callback_url, json=callback_data, timeout=30)
 
         if response.status_code == 200:
             logger.info(f"Callback succeeded for mid: {mid}")

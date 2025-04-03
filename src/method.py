@@ -75,17 +75,21 @@ class TranscriptionProcessor:
                         i += 1
 
                     full_content = "".join(content_lines)
-                    full_content = re.sub(r'\s+', ' ', full_content).strip()
+                    full_content = re.sub(r"\s+", " ", full_content).strip()
 
-                    speaker_match = re.search(r"\[(SPEAKER_\d+)\]:\s*(.*)", full_content)
+                    speaker_match = re.search(
+                        r"\[(SPEAKER_\d+)\]:\s*(.*)", full_content
+                    )
                     if speaker_match:
-                        segments.append({
-                            "ID": len(segments) + 1,
-                            "start_time": start_time,
-                            "end_time": end_time,
-                            "speaker": f"[{speaker_match.group(1)}]",
-                            "content": speaker_match.group(2)
-                        })
+                        segments.append(
+                            {
+                                "ID": len(segments) + 1,
+                                "start_time": start_time,
+                                "end_time": end_time,
+                                "speaker": f"[{speaker_match.group(1)}]",
+                                "content": speaker_match.group(2),
+                            }
+                        )
                 else:
                     i += 1
 
@@ -110,17 +114,66 @@ class TranscriptionProcessor:
         Returns:
             (vtt_object_key, json_object_key) 元组
         """
-        month_str = object_key.split("/")[-2]
+        month_str = object_key.split("/")[-3]
+        sig_str = object_key.split("/")[-4]
         year_str = "25"
         month_number = self.month_mapping.get(month_str.lower(), "01")
         current_year_month = f"{year_str}-{month_number}"
 
         base_path = object_key.split("/")[0]
-        vtt_object_key = (
-            f"{base_path}/{current_year_month}/{mid}/{os.path.basename(vtt_file)}"
-        )
-        json_object_key = (
-            f"{base_path}/{current_year_month}/{mid}/{os.path.basename(json_file)}"
-        )
+        vtt_object_key = f"{base_path}/{sig_str}/{current_year_month}/{mid}/{os.path.basename(vtt_file)}"
+        json_object_key = f"{base_path}/{sig_str}/{current_year_month}/{mid}/{os.path.basename(json_file)}"
 
         return vtt_object_key, json_object_key
+
+    @staticmethod
+    def deduplicate(text, max_repeat=3):
+        # 处理连续重复的相同短语（支持中文）
+        pattern = rf"((?:\S+?|\s+?))\1{{{max_repeat},}}"
+        text = re.sub(pattern, r"\1", text)
+
+        return text
+
+    @staticmethod
+    def deduplicate_vtt_file(file_path, max_repeat):
+        """
+        对VTT文件的每一行进行去重处理，并将结果写入指定的输出文件
+        :param file_path: VTT文件输入路径
+        :param max_repeat: 最大允许重复次数
+        """
+        try:
+            # 读取VTT文件内容
+            with open(file_path, "r", encoding="utf-8") as f:
+                lines = f.readlines()
+
+            mode = True
+
+            # 处理每一行
+            output_lines = []
+            for line in lines:
+                # 去除首尾空白后处理，但保留原始换行符
+                stripped_line = line.rstrip("\n")
+                if stripped_line:
+                    if mode:
+                        processed_line = TranscriptionProcessor.deduplicate(
+                            stripped_line, max_repeat - 1
+                        )
+                        if processed_line != stripped_line:
+                            mode = False
+                        # 只在需要的时候将处理后的行添加到输出列表中
+                        output_lines.append(processed_line)
+                        print(processed_line)
+                    else:
+                        continue
+                else:
+                    output_lines.append("")  # 保留空行
+                    mode = True
+
+            # 将处理后的内容写入输出文件
+            with open(file_path, "w", encoding="utf-8") as f_out:
+                f_out.write("\n".join(output_lines))
+
+        except FileNotFoundError:
+            raise FileNotFoundError(f"文件 {file_path} 未找到")
+        except Exception as e:
+            raise Exception(f"处理文件 {file_path} 时出错: {str(e)}")
