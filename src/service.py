@@ -124,7 +124,7 @@ async def process_transcription_task(object_key: str, bucket_key: str, mid: str)
         if process.returncode != 0:
             raise Exception(f"whisperx failed: {process.stderr}")
 
-        TranscriptionProcessor.deduplicate_vtt_file(vtt_file, max_repeat=3)
+        TranscriptionProcessor.deduplicate_vtt_file(vtt_file, max_repeat=5)
 
         with open(vtt_file, "r", encoding="utf-8") as f:
             transcription_text = f.read()

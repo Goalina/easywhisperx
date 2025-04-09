@@ -162,7 +162,6 @@ class TranscriptionProcessor:
                             mode = False
                         # 只在需要的时候将处理后的行添加到输出列表中
                         output_lines.append(processed_line)
-                        print(processed_line)
                     else:
                         continue
                 else:
