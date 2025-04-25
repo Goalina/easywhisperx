@@ -1,13 +1,15 @@
 import configparser
 import logging
 import asyncio
+import aiofiles
 from fastapi import FastAPI, responses
 from pydantic import BaseModel
 import os
 import uuid
 import shutil
-from typing import Dict
+from typing import Dict, Optional
 import aiohttp
+from contextlib import asynccontextmanager
 from obs_download import download_file
 from upload import upload
 from method import TranscriptionProcessor
@@ -34,52 +36,63 @@ callback_url = config["callback"]["url"].replace('"', "").strip()
 storage_server = config["storage"]["server"].replace('"', "").strip()
 storage_bucket = config["storage"]["bucket"].replace('"', "").strip()
 
-app = FastAPI()
 
-# 任务队列和状态跟踪
-task_queue = asyncio.Queue()
-task_status: Dict[str, str] = {}  # mid: status
-current_task = None
-queue_lock = asyncio.Lock()
+class TaskManager:
+    def __init__(self):
+        self.task_queue = asyncio.Queue()
+        self.task_status: Dict[str, str] = {}  # 只包含 queued/processing 状态的任务
+        self.current_task: Optional[str] = None
+        self.lock = asyncio.Lock()
+
+    async def add_task(self, request):
+        async with self.lock:
+            if request.mid in self.task_status:  # 只检查当前活跃任务
+                return False
+            await self.task_queue.put(request)
+            self.task_status[request.mid] = "queued"
+            return True
+
+    async def process_next_task(self):
+        async with self.lock:
+            if self.task_queue.empty():
+                return None
+
+            request = await self.task_queue.get()
+            self.current_task = request.mid
+            self.task_status[request.mid] = "processing"
+            return request
+
+    async def complete_task(self, mid: str):
+        """完成任务后立即清除状态"""
+        async with self.lock:
+            self.current_task = None
+            if mid in self.task_status:
+                del self.task_status[mid]
+
+
+task_manager = TaskManager()
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # 启动任务处理器
+    processor_task = asyncio.create_task(task_processor())
+    yield
+    # 关闭时取消任务
+    processor_task.cancel()
+    try:
+        await processor_task
+    except asyncio.CancelledError:
+        logger.info("Task processor stopped gracefully")
+
+
+app = FastAPI(lifespan=lifespan)
 
 
 class DownloadRequest(BaseModel):
     object_key: str
     bucket_key: str
     mid: str
-
-
-@app.on_event("startup")
-async def startup_event():
-    """启动时创建任务处理器"""
-    asyncio.create_task(task_processor())
-
-
-async def task_processor():
-    """后台任务处理器，串行处理队列中的任务"""
-    global current_task
-    while True:
-        # 从队列获取任务
-        async with queue_lock:
-            if not task_queue.empty():
-                request = await task_queue.get()
-                current_task = request.mid
-                task_status[request.mid] = "processing"
-
-                try:
-                    await process_transcription_task(
-                        request.object_key,
-                        request.bucket_key,
-                        request.mid
-                    )
-                    task_status[request.mid] = "completed"
-                except Exception as e:
-                    task_status[request.mid] = f"failed: {str(e)}"
-                    logger.error(f"Task failed: {str(e)}", exc_info=True)
-                finally:
-                    current_task = None
-            else:
-                await asyncio.sleep(1)  # 队列为空时短暂休眠
 
 
 @app.post("/meeting_translate")
@@ -91,61 +104,81 @@ async def meeting_translate(request: DownloadRequest):
             status_code=400,
         )
 
-    if request.mid in task_status:
+    if not await task_manager.add_task(request):
         return {"message": "Task already in queue", "mid": request.mid}
-
-    await task_queue.put(request)
-    task_status[request.mid] = "queued"
 
     return {
         "message": "Task added to queue",
         "mid": request.mid,
-        "queue_position": task_queue.qsize(),
+        "queue_position": task_manager.task_queue.qsize(),
         "current_status": "queued"
     }
 
 
 @app.get("/task_status/{mid}")
 async def get_status(mid: str):
-    """获取任务状态"""
-    status = task_status.get(mid, "not_found")
+    """获取任务状态（不在字典中即表示已完成/不存在）"""
+    status = task_manager.task_status.get(mid, "not_found")
     return {
         "mid": mid,
         "status": status,
-        "is_processing": current_task == mid,
-        "queue_size": task_queue.qsize()
+        "is_processing": task_manager.current_task == mid,
+        "queue_size": task_manager.task_queue.qsize()
     }
 
 
+async def task_processor():
+    """后台任务处理器"""
+    while True:
+        try:
+            request = await task_manager.process_next_task()
+            if not request:
+                await asyncio.sleep(1)
+                continue
+
+            try:
+                await process_transcription_task(
+                    request.object_key,
+                    request.bucket_key,
+                    request.mid
+                )
+                await task_manager.complete_task(request.mid)  # 成功完成立即清除
+            except Exception as e:
+                logger.error(f"Task processing failed: {str(e)}", exc_info=True)
+                await task_manager.complete_task(request.mid)  # 失败也立即清除
+        except asyncio.CancelledError:
+            break
+        except Exception as e:
+            logger.error(f"Task processor error: {str(e)}", exc_info=True)
+            await asyncio.sleep(5)
+
+
 async def process_transcription_task(object_key: str, bucket_key: str, mid: str):
-    """实际处理任务"""
+    """实际处理任务（严格串行执行）"""
     download_path = None
     try:
         logger.info(f"Starting processing for mid {mid}")
 
-        # 创建目录
+        # 1. 创建目录
         uuid_str = str(uuid.uuid4())
         download_path = os.path.join(
             download_directory, uuid_str, object_key.split("/")[-1]
         )
         output_path = f"{output_directory}/{mid}"
 
-        os.makedirs(os.path.dirname(download_path), exist_ok=True)
-        os.makedirs(output_path, exist_ok=True)
+        await asyncio.to_thread(os.makedirs, os.path.dirname(download_path), exist_ok=True)
+        await asyncio.to_thread(os.makedirs, output_path, exist_ok=True)
 
-        # 下载文件
         result = await asyncio.to_thread(
             download_file, bucket_key, object_key, download_path
         )
         if not result["success"]:
             raise Exception(f"File download failed: {result['errorMessage']}")
 
-        # 处理视频
         trimmer_path = await asyncio.to_thread(
             trimmer_video, download_path, mid
         )
 
-        # 准备输出文件路径
         vtt_file = os.path.join(
             output_path, f"{os.path.splitext(os.path.basename(trimmer_path))[0]}.vtt"
         )
@@ -153,7 +186,6 @@ async def process_transcription_task(object_key: str, bucket_key: str, mid: str)
             output_path, f"{os.path.splitext(os.path.basename(trimmer_path))[0]}.json"
         )
 
-        # 执行WhisperX (使用subprocess的异步版本)
         await run_async_subprocess([
             "whisperx",
             "--model", "large-v3-turbo",
@@ -170,37 +202,32 @@ async def process_transcription_task(object_key: str, bucket_key: str, mid: str)
             "--max_line_width", "20",
         ])
 
-        # 处理转录结果
         await asyncio.to_thread(
             TranscriptionProcessor.deduplicate_vtt_file, vtt_file, max_repeat=5
         )
 
-        # 读取和调整转录文件
-        with open(vtt_file, "r", encoding="utf-8") as f:
-            transcription_text = f.read()
+        async with aiofiles.open(vtt_file, "r", encoding="utf-8") as f:
+            transcription_text = await f.read()
 
         formater = TranscriptionProcessor()
         adjusted_transcription = formater.adjust_speaker_numbers(transcription_text)
 
-        with open(vtt_file, "w", encoding="utf-8") as f:
-            f.write(adjusted_transcription)
+        async with aiofiles.open(vtt_file, "w", encoding="utf-8") as f:
+            await f.write(adjusted_transcription)
 
         formater.convert_vtt_to_json(vtt_file)
 
-        # 生成对象键并上传
         vtt_object_key, json_object_key = formater.generate_object_keys(
             mid, object_key, vtt_file, json_file
         )
         mp4_object_key = os.path.splitext(vtt_object_key)[0] + ".mp4"
 
-        # 异步上传
         await asyncio.gather(
             upload(storage_server, storage_bucket, vtt_file, vtt_object_key),
             upload(storage_server, storage_bucket, json_file, json_object_key),
             upload(storage_server, storage_bucket, trimmer_path, mp4_object_key),
         )
 
-        # 发送回调
         await send_callback_async(
             mid,
             vtt_path=vtt_object_key,
