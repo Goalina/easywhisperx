@@ -10,10 +10,10 @@ import shutil
 from typing import Dict, Optional
 import aiohttp
 from contextlib import asynccontextmanager
-from obs_download import download_file
-from upload import upload
-from method import TranscriptionProcessor
-from audio_trimmer import trimmer_video
+from .obs_download import download_file
+from .upload import upload
+from .method import TranscriptionProcessor
+from .audio_trimmer import trimmer_video
 
 # 日志配置
 logging.basicConfig(

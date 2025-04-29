@@ -33,13 +33,12 @@ RUN mkdir -p $HOME/.pip && \
     chown -R $APP_USER:$APP_USER $HOME/.pip
 
 # 安装Python依赖
-RUN pip install whisperx fastapi uvicorn pydantic esdk-obs-python
+RUN pip install whisperx fastapi uvicorn pydantic esdk-obs-python aiofiles
 
-# 克隆代码
-ARG GIT_USER
-ARG GIT_PASS
-RUN git clone https://${GIT_USER}:${GIT_PASS}@github.com/opensourceways/easywhisperx.git && \
-    chown -R $APP_USER:$APP_USER /app/easywhisperx
+# 创建目标目录并复制本地文件
+RUN mkdir -p /app/easywhisperx
+COPY --chown=$APP_USER:$APP_USER . /app/easywhisperx/
+
 RUN cp /app/easywhisperx/src/transcribe.py /home/appuser/.local/lib/python3.10/site-packages/whisperx/transcribe.py
 
 EXPOSE 8000
