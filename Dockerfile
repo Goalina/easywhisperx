@@ -1,4 +1,4 @@
-FROM nvcr.io/nvidia/cuda:12.1.1-devel-ubuntu22.04  # 使用与可运行环境匹配的CUDA 12.1
+FROM nvcr.io/nvidia/cuda:12.1.1-devel-ubuntu22.04
 
 # 设置非root用户环境
 ARG APP_USER=appuser
