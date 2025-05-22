@@ -43,7 +43,7 @@ RUN pip install \
 RUN pip install \
     numpy==1.26.4 \
     transformers==4.44.2 \
-    whisperx==3.3.2 \
+    whisperx==3.3.1 \
     fastapi==0.110.3 \
     uvicorn==0.30.1 \
     pydantic==2.7.3 \
