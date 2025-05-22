@@ -1,5 +1,7 @@
 import configparser
 import logging
+import asyncio
+from functools import partial
 import os
 
 from obs import ObsClient
@@ -15,25 +17,53 @@ SecretAccessKey = (
 )
 
 
-def upload(server: str, bucketName: str, objectKey: str, file_path: str):
-
+async def upload(server: str, bucketName: str, objectKey: str, file_path: str) -> bool:
+    """异步上传，返回是否成功"""
     ak = AccessKeyID
     sk = SecretAccessKey
-
     server = f"https://{server}"
 
-    obsClient = ObsClient(access_key_id=ak, secret_access_key=sk, server=server)
+    if not all([ak, sk]):
+        logging.error("Missing OBS credentials in configuration")
+        return False
 
+    loop = asyncio.get_event_loop()
+    obsClient = None
     try:
-        headers = PutObjectHeader()
-        bucketName = bucketName
-        objectKey = objectKey
-        file_path = file_path
+        # 创建客户端
+        obsClient = await loop.run_in_executor(
+            None,
+            partial(ObsClient,
+                    access_key_id=ak,
+                    secret_access_key=sk,
+                    server=server)
+        )
 
-        resp = obsClient.putFile(bucketName, objectKey, file_path, headers)
-        if resp.status < 300:
+        # 检查文件是否存在
+        if not os.path.exists(file_path):
+            logging.error(f"File not found: {file_path}")
+            return False
+
+        # 执行上传
+        resp = await loop.run_in_executor(
+            None,
+            partial(obsClient.putFile,
+                    bucketName,
+                    objectKey,
+                    file_path,
+                    headers=PutObjectHeader())
+        )
+
+        if resp and resp.status < 300:
             logging.info(f"{objectKey} successfully uploaded to {bucketName}")
+            return True
         else:
-            logging.error(f"{objectKey} failed to upload to {bucketName}")
+            logging.error(f"{objectKey} failed to upload to {bucketName}. Response: {resp}")
+            return False
+
     except Exception as e:
-        logging.error(f"{objectKey} failed to upload to {bucketName},{e}")
+        logging.error(f"Failed to upload {objectKey} to {bucketName}. Error: {str(e)}\n{traceback.format_exc()}")
+        return False
+    finally:
+        if obsClient is not None:
+            await loop.run_in_executor(None, obsClient.close)
