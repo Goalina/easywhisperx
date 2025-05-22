@@ -236,9 +236,9 @@ async def process_transcription_task(object_key: str, bucket_key: str, mid: str)
         mp4_object_key = os.path.splitext(vtt_object_key)[0] + ".mp4"
 
         await asyncio.gather(
-            upload(storage_server, storage_bucket, vtt_file, vtt_object_key),
-            upload(storage_server, storage_bucket, json_file, json_object_key),
-            upload(storage_server, storage_bucket, trimmer_path, mp4_object_key),
+            upload(storage_server, storage_bucket, vtt_object_key, vtt_file),
+            upload(storage_server, storage_bucket, json_object_key, json_file),
+            upload(storage_server, storage_bucket, mp4_object_key, trimmer_path),
         )
 
         await send_callback_async(
