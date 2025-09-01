@@ -1,3 +1,4 @@
+import datetime
 import json
 import os
 import re
@@ -125,6 +126,38 @@ class TranscriptionProcessor:
         json_object_key = f"{base_path}/{sig_str}/{current_year_month}/{mid}/{os.path.basename(json_file)}"
 
         return vtt_object_key, json_object_key
+
+    def generate_object_keys_for_openubmc(
+        self, mid: str, sub_id: str, object_key: str, vtt_file: str, json_file: str, topic_file,
+    ) -> tuple[str, str, str]:
+        """
+        生成VTT和JSON文件在对象存储中的完整路径
+
+        Args:
+            mid: 会议ID
+            sub_id: 会议子ID
+            object_key: 基础对象键
+            vtt_file: VTT本地文件路径
+            json_file: JSON本地文件路径
+            topic_file: 议题切割文件路径
+
+        Returns:
+            (vtt_object_key, json_object_key) 元组
+        """
+        month_str = object_key.split("/")[2]
+        sig_str = object_key.split("/")[1]
+        year_str = datetime.datetime.now().strftime("%y")
+        month_number = self.month_mapping.get(month_str.lower(), "01")
+        current_year_month = f"{year_str}-{month_number}"
+
+        meeting_identifier = f"{mid}_{sub_id}"
+
+        base_path = object_key.split("/")[0]
+        vtt_object_key = f"{base_path}/{sig_str}/{current_year_month}/{meeting_identifier}/{os.path.basename(vtt_file)}"
+        json_object_key = f"{base_path}/{sig_str}/{current_year_month}/{meeting_identifier}/{os.path.basename(json_file)}"
+        topic_object_key = f"{base_path}/{sig_str}/{current_year_month}/{meeting_identifier}/{os.path.basename(topic_file)}"
+
+        return vtt_object_key, json_object_key, topic_object_key
 
     @staticmethod
     def deduplicate(text, max_repeat=3):
