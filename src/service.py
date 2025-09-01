@@ -9,7 +9,7 @@ from pydantic import BaseModel
 import os
 import uuid
 import shutil
-from typing import Dict, Optional
+from typing import Dict, Optional, Union
 import aiohttp
 from contextlib import asynccontextmanager
 
@@ -38,8 +38,9 @@ hf_token = config["token"]["hf_token"].replace('"', "").strip()
 api_key = config["token"]["api_key"].replace('"', "").strip()
 
 callback_url = config["callback"]["url"].replace('"', "").strip()
-callback_username = config["callback"]["username"].replace('"', "").strip()
-callback_password = config["callback"]["password"].replace('"', "").strip()
+callback_url_openubmc = config["openubmc"]["url"].replace('"', "").strip()
+callback_username = config["openubmc"]["username"].replace('"', "").strip()
+callback_password = config["openubmc"]["password"].replace('"', "").strip()
 
 storage_server = config["storage"]["server"].replace('"', "").strip()
 storage_bucket = config["storage"]["bucket"].replace('"', "").strip()
@@ -116,7 +117,7 @@ class DownloadRequestUBMC(BaseModel):
 
 
 @app.post("/meeting_translate")
-async def meeting_translate(request: DownloadRequest):
+async def meeting_translate(request: Union[DownloadRequest, DownloadRequestUBMC]):
     """接收翻译请求并加入队列"""
     if not await task_manager.add_task(request):
         return {"message": "Task already in queue", "mid": request.mid}
@@ -151,18 +152,18 @@ async def task_processor():
                 continue
 
             try:
-                if isinstance(request, DownloadRequest):
-                    await process_transcription_task(
-                        object_key=request.object_key,
-                        bucket_key=request.bucket_key,
-                        mid=request.mid
-                    )
-                else:
+                if hasattr(request, "sub_id"):
                     await process_transcription_task_for_openubmc(
                         object_key=request.object_key,
                         bucket_key=request.bucket_key,
                         mid=request.mid,
                         sub_id=request.sub_id
+                    )
+                else:
+                    await process_transcription_task(
+                        object_key=request.object_key,
+                        bucket_key=request.bucket_key,
+                        mid=request.mid
                     )
                 await task_manager.complete_task(request.mid)
             except Exception as e:
@@ -437,7 +438,7 @@ async def send_callback_async_for_openubmc(mid: str, sub_id: str, vtt_path: str,
         auth = aiohttp.BasicAuth(callback_username, callback_password)
         async with aiohttp.ClientSession() as session:
             async with session.post(
-                    callback_url, json=callback_data, timeout=30, auth=auth
+                    callback_url_openubmc, json=callback_data, timeout=30, auth=auth
             ) as resp:
                 if resp.status == 200:
                     logger.info(f"Callback succeeded for mid: {mid}")

@@ -155,7 +155,10 @@ class TranscriptionProcessor:
         base_path = object_key.split("/")[0]
         vtt_object_key = f"{base_path}/{sig_str}/{current_year_month}/{meeting_identifier}/{os.path.basename(vtt_file)}"
         json_object_key = f"{base_path}/{sig_str}/{current_year_month}/{meeting_identifier}/{os.path.basename(json_file)}"
-        topic_object_key = f"{base_path}/{sig_str}/{current_year_month}/{meeting_identifier}/{os.path.basename(topic_file)}"
+        if topic_file is None:
+            topic_object_key = None
+        else:
+            topic_object_key = f"{base_path}/{sig_str}/{current_year_month}/{meeting_identifier}/{os.path.basename(topic_file)}"
 
         return vtt_object_key, json_object_key, topic_object_key
 
