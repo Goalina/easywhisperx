@@ -52,7 +52,7 @@ RUN pip install \
     soundfile==0.12.1 \
     protobuf==5.27.1 \
     tokenizers==0.19.1 \
-    webvtt==0.5.1 \
+    webvtt-py==0.5.1 \
 
 # 创建目标目录并复制本地文件
 RUN mkdir -p /app/easywhisperx
