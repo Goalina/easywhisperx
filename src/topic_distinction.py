@@ -7,7 +7,7 @@ from typing import List, Dict
 from pathlib import Path
 
 config = configparser.ConfigParser()
-config.read("/root/wl/wl/easywhisperx/docker_gpu/config.ini")
+config.read("/app/easywhisperx/config/config.ini")
 
 api_key = config["token"]["api_key"].replace('"', "").strip()
 
