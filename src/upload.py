@@ -3,24 +3,29 @@ import logging
 import asyncio
 from functools import partial
 import os
-
-from obs import ObsClient
-from obs import PutObjectHeader
 import traceback
+
+from obs import ObsClient,PutObjectHeader
 
 config = configparser.ConfigParser()
 config.read("/app/easywhisperx/config/config.ini")
 
-AccessKeyID = config.get("obs", "AccessKeyID", fallback="").replace('"', "").strip()
-SecretAccessKey = (
-    config.get("obs", "SecretAccessKey", fallback="").replace('"', "").strip()
-)
 
-
-async def upload(server: str, bucketName: str, objectKey: str, file_path: str) -> bool:
+async def upload(server: str, bucketName: str, objectKey: str, file_path: str, community: int) -> bool:
     """异步上传，返回是否成功"""
-    ak = AccessKeyID
-    sk = SecretAccessKey
+    if community == 1:
+        ak = config.get("obs", "AccessKeyID", fallback="").replace('"', "").strip()
+        sk = (
+            config.get("obs", "SecretAccessKey", fallback="").replace('"', "").strip()
+        )
+    elif community == 2:
+        ak = config.get("openubmc", "AccessKeyID", fallback="").replace('"', "").strip()
+        sk = (
+            config.get("openubmc", "SecretAccessKey", fallback="").replace('"', "").strip()
+        )
+    else:
+        raise ValueError(f"Invalid community value: {community}")
+
     server = f"https://{server}"
 
     if not all([ak, sk]):
