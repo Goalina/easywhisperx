@@ -113,7 +113,7 @@ class DownloadRequestUBMC(BaseModel):
     object_key: str
     bucket_key: str
     mid: str
-    sub_id: Optional[str] = None
+    sub_id: str | None = Field(..., description="必须显式传递 sub_id 字段")
 
 
 @app.post("/meeting_translate")
