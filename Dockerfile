@@ -51,7 +51,8 @@ RUN pip install \
     aiofiles==23.2.1 \
     soundfile==0.12.1 \
     protobuf==5.27.1 \
-    tokenizers==0.19.1
+    tokenizers==0.19.1 \
+    webvtt==0.5.1 \
 
 # 创建目标目录并复制本地文件
 RUN mkdir -p /app/easywhisperx
