@@ -5,7 +5,7 @@ from pathlib import Path
 
 import aiofiles
 from fastapi import FastAPI, responses
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 import os
 import uuid
 import shutil
