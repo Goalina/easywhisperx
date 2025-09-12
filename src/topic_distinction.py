@@ -6,6 +6,8 @@ import re
 from typing import List, Dict
 from pathlib import Path
 
+from src.service import logger
+
 config = configparser.ConfigParser()
 config.read("/app/easywhisperx/config/config.ini")
 
@@ -61,6 +63,7 @@ def detect_topics(conversation: str) -> Dict:
 4. 时间戳格式保持原样（HH:MM:SS.SSS）
 5. 为每个议题提供开始和结束时间
 6. 仅返回JSON格式
+7. 每个议题的时间不应过度重合
 
 识别议题时遵循以下严格标准：
 1. **实质讨论原则**：仅当出问题分析或决策讨论时才视为议题
@@ -70,22 +73,46 @@ def detect_topics(conversation: str) -> Dict:
    - 纯信息通报（无讨论环节）
    - 会议过渡性发言（如"接下来讨论..."）
    - 技术细节说明（除非引发争议讨论）
-4. **时间连续性**：议题讨论应在时间上连续，中间不穿插其他话题
+4. **时间连续性**：议题讨论应在时间上较连续，不要过于分散
 5. **关键词提示**：关注类似"讨论"、"问题"、"方案"、"决定"、"决议"等核心讨论词"""
 
-    response = requests.post(
-        API_URL,
-        headers={
-            "Authorization": f"Bearer {API_KEY}",
-            "Content-Type": "application/json",
-        },
-        json={
-            "model": MODEL_NAME,
-            "messages": [{"role": "user", "content": prompt}],
-            "temperature": 0.3,
-        },
-    )
-    return response.json()
+    max_retries = 1
+    timeout = 1800
+    last_exception = None
+
+    for attempt in range(max_retries + 1):
+        try:
+            logger.info(f"尝试第 {attempt + 1} 次请求API（超时={timeout}s）...")
+
+            response = requests.post(
+                API_URL,
+                headers={
+                    "Authorization": f"Bearer {API_KEY}",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "model": MODEL_NAME,
+                    "messages": [{"role": "user", "content": prompt}],
+                    "temperature": 0.3,
+                },
+                timeout=timeout,
+            )
+            response.raise_for_status()
+            logger.info("API请求成功")
+            return response.json()
+
+        except requests.exceptions.Timeout:
+            last_exception = "API请求超时（1800s）"
+            logger.error(last_exception)
+        except requests.exceptions.RequestException as e:
+            last_exception = f"API请求失败: {str(e)}"
+            logger.error(last_exception)
+
+        if attempt < max_retries:
+            logger.info("准备重试...")
+
+    # 所有尝试都失败
+    raise Exception(f"所有尝试失败。最后错误: {last_exception}")
 
 def extract_json_from_response(response_text: str) -> List[Dict]:
     if not response_text.strip():
