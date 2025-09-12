@@ -117,7 +117,7 @@ class DownloadRequestUBMC(BaseModel):
 
 
 @app.post("/meeting_translate")
-async def meeting_translate(request: Union[DownloadRequest, DownloadRequestUBMC]):
+async def meeting_translate(request: Union[DownloadRequestUBMC, DownloadRequest]):
     """接收翻译请求并加入队列"""
     if not await task_manager.add_task(request):
         return {"message": "Task already in queue", "mid": request.mid}
