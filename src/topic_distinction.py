@@ -6,7 +6,6 @@ import re
 from typing import List, Dict
 from pathlib import Path
 
-from src.service import logger
 
 config = configparser.ConfigParser()
 config.read("/app/easywhisperx/config/config.ini")
@@ -82,8 +81,6 @@ def detect_topics(conversation: str) -> Dict:
 
     for attempt in range(max_retries + 1):
         try:
-            logger.info(f"尝试第 {attempt + 1} 次请求API（超时={timeout}s）...")
-
             response = requests.post(
                 API_URL,
                 headers={
@@ -98,18 +95,18 @@ def detect_topics(conversation: str) -> Dict:
                 timeout=timeout,
             )
             response.raise_for_status()
-            logger.info("API请求成功")
+            print("API请求成功")
             return response.json()
 
         except requests.exceptions.Timeout:
             last_exception = "API请求超时（1800s）"
-            logger.error(last_exception)
+            print(last_exception)
         except requests.exceptions.RequestException as e:
             last_exception = f"API请求失败: {str(e)}"
-            logger.error(last_exception)
+            print(last_exception)
 
         if attempt < max_retries:
-            logger.info("准备重试...")
+            print("准备重试...")
 
     # 所有尝试都失败
     raise Exception(f"所有尝试失败。最后错误: {last_exception}")
